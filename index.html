@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#0b0b10"><title>SongFinder — find your sound</title>
+<meta name="theme-color" content="#0b0b10"><title>SongFinder — find your sound</title><script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 :root{color-scheme:dark;--bg:#0b0b10;--panel:#14141c;--muted:#9999aa;--text:#f5f4fb;--pink:#ff5b9b;--lime:#c9ff67;--line:#292936}
@@ -27,12 +27,12 @@ main{max-width:1160px;margin:0 auto;padding:52px 24px 70px}.intro{text-align:cen
 <nav><div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>songfinder<span style="color:var(--pink)">.</span></div><div class="pill">✦ YOUR NEXT OBSESSION</div></nav>
 <main>
 <section class="intro"><div class="eyebrow">THE MUSIC MATCHMAKER</div><h1>Keep the songs.<br><span>Lose the skips.</span></h1><p>Swipe through tracks. Build a playlist that actually sounds like you.</p></section>
-<div class="layout">
+<section class="panel" style="padding:18px 20px;margin-bottom:20px"><h2 style="font:600 17px Space Grotesk;margin:0 0 8px">Connect your music universe</h2><p style="color:var(--muted);font-size:12px;line-height:1.5">Search real music videos and save liked tracks to a YouTube playlist. Google OAuth Client ID is required once.</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:9px"><input id="clientId" placeholder="Google OAuth Client ID" style="min-width:0;background:#0b0b10;border:1px solid var(--line);border-radius:11px;padding:12px;color:white"><button class="btn" id="connect">Connect Google ↗</button><input id="query" placeholder="Artist / genre / mood" style="min-width:0;background:#0b0b10;border:1px solid var(--line);border-radius:11px;padding:12px;color:white"><button class="btn primary" id="searchMusic">Find real songs ♪</button></div><p id="connectStatus" style="color:var(--muted);font-size:11px;line-height:1.5;margin:10px 0 0">Not connected. Client ID stays in this browser.</p></section><div class="layout">
 <section class="panel"><div class="panel-head"><h2>🎧 The listening room</h2><span class="counter" id="counter">Track 1 of 12</span></div><div class="progress"><span id="progress" style="width:8.33%"></span></div><div class="deck"><article class="track-card" id="trackCard"><div class="music-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div><div class="art-mark">SF / 001</div><div class="track-info"><span class="tag" id="genre">INDIE POP</span><h3 id="songTitle">Midnight City</h3><div class="artist" id="songArtist">M83</div><div class="source-note" id="sourceNote">A little nostalgia. A lot of synth.</div></div></article><div class="actions"><button class="action no" id="bad" aria-label="Dislike song">✕ Nope</button><button class="action yes" id="good" aria-label="Like song">♥ That's it</button><button class="action skip" id="skip">↷ Skip</button></div><div class="keys">Keyboard friendly: ← dislike · → like · ↓ skip</div></div></section>
 <aside class="right">
 <section class="panel"><div class="panel-head"><h2>Your taste, so far</h2><span class="counter">LIVE</span></div><div class="stats"><div class="stat"><strong id="likedCount">0</strong><small>Liked</small></div><div class="stat"><strong id="passedCount">0</strong><small>Passed</small></div><div class="stat"><strong id="matchCount">0%</strong><small>Match rate</small></div></div><div class="settings"><div class="settings-top"><h2>Playlist size</h2><span class="range-label" id="sizeLabel">Top 10</span></div><input class="range" id="sizeRange" type="range" min="10" max="50" step="10" value="10" aria-label="Playlist size"><div class="range-ends"><span>10 tracks</span><span>50 tracks</span></div></div></section>
 <section class="panel playlist"><div class="playlist-head"><h2>✦ Your matches</h2><span class="mini-count" id="listCount">0 songs</span></div><div class="song-list" id="songList"><div class="empty">Your future favorites will show up here.</div></div><div class="footer-actions"><button class="btn" id="reset">Start over</button><button class="btn primary" id="export">Export playlist ↗</button></div></section>
-<div class="notice">Prototype mode: sample tracks are included so you can try the experience right away. Playlist export works now. Direct YouTube Music playlist creation needs a secure Google sign-in / API integration.</div>
+<div class="notice">Real search and playlist creation require Google OAuth setup. The created YouTube playlist can appear in YouTube Music.</div>
 </aside></div></main><div class="toast" id="toast" role="status"></div>
 <script>
 const tracks=[
@@ -49,7 +49,39 @@ const tracks=[
 {title:"Resonance",artist:"HOME",genre:"VAPORWAVE",note:"A memory from a life you didn't live.",color:"#49a7a0"},
 {title:"Everybody Wants to Rule the World",artist:"Tears for Fears",genre:"NEW WAVE",note:"Timeless, no notes.",color:"#b7a35b"}
 ];
-let index=0,liked=[],passed=[],decisions={};
+let index=0,liked=[],passed=[],decisions={},accessToken=null,liveMode=false;
+const clientInput=document.getElementById('clientId'),statusEl=document.getElementById('connectStatus');
+clientInput.value=localStorage.getItem('songfinder_client_id')||'';
+clientInput.addEventListener('change',()=>localStorage.setItem('songfinder_client_id',clientInput.value.trim()));
+function setStatus(msg,ok){statusEl.textContent=msg;statusEl.style.color=ok?'var(--lime)':'var(--muted)'}
+document.getElementById('connect').addEventListener('click',()=>{
+ const id=clientInput.value.trim();if(!id){toast('Add your Google OAuth Client ID first.');return}
+ if(!window.google?.accounts?.oauth2){toast('Google sign-in is loading. Try again in a moment.');return}
+ const tc=google.accounts.oauth2.initTokenClient({client_id:id,scope:'https://www.googleapis.com/auth/youtube.force-ssl',callback:r=>{if(r.error){setStatus('Sign-in failed: '+r.error);return}accessToken=r.access_token;setStatus('Google connected! Search real tracks, like them, then create your playlist.',true);toast('Google connected!')}});
+ tc.requestAccessToken({prompt:'consent'});
+});
+async function realSearch(){
+ const q=document.getElementById('query').value.trim();if(!q){toast('Type an artist, genre or mood.');return}if(!accessToken){toast('Connect Google first.');return}
+ const b=document.getElementById('searchMusic');b.disabled=true;b.textContent='Searching…';
+ try{const u=new URL('https://www.googleapis.com/youtube/v3/search');u.search=new URLSearchParams({part:'snippet',q:q+' music',type:'video',videoCategoryId:'10',maxResults:'15',safeSearch:'strict'});
+ const r=await fetch(u,{headers:{Authorization:'Bearer '+accessToken}}),d=await r.json();if(!r.ok)throw Error(d.error?.message||'Search failed');
+ const found=(d.items||[]).filter(x=>x.id?.videoId).map((x,i)=>({title:x.snippet.title,artist:x.snippet.channelTitle,genre:'YOUTUBE MUSIC',note:'Real result from YouTube',color:['#d74e9d','#dc8e54','#6474c9','#49a7a0'][i%4],videoId:x.id.videoId,score:Math.max(70,98-i*2)}));
+ if(!found.length)throw Error('No results. Try another search.');
+ tracks.splice(0,tracks.length,...found);index=0;liked=[];passed=[];decisions={};liveMode=true;renderTrack();setStatus('Loaded '+found.length+' real results for '+q+'.',true);toast('Real tracks loaded!');
+ }catch(e){setStatus(e.message);toast(e.message)}finally{b.disabled=false;b.textContent='Find real songs ♪'}
+}
+document.getElementById('searchMusic').addEventListener('click',realSearch);
+document.getElementById('query').addEventListener('keydown',e=>{if(e.key==='Enter')realSearch()});
+async function createYouTubePlaylist(){
+ if(!accessToken){toast('Connect Google first.');return}const list=liked.filter(t=>t.videoId).slice().sort((a,b)=>b.score-a.score).slice(0,Number(document.getElementById('sizeRange').value));
+ if(!list.length){toast('Search real songs and like some first.');return}
+ const b=document.getElementById('export');b.disabled=true;b.textContent='Creating…';
+ try{
+ const r=await fetch('https://www.googleapis.com/youtube/v3/playlists?part=snippet,status',{method:'POST',headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},body:JSON.stringify({snippet:{title:'SongFinder · My Matches',description:'Created with SongFinder'},status:{privacyStatus:'private'}})});const p=await r.json();if(!r.ok)throw Error(p.error?.message||'Playlist creation failed');
+ for(const t of list){const a=await fetch('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet',{method:'POST',headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},body:JSON.stringify({snippet:{playlistId:p.id,resourceId:{kind:'youtube#video',videoId:t.videoId}}})});if(!a.ok){const e=await a.json();throw Error('Playlist made, but adding a track failed: '+(e.error?.message||t.title))}}
+ setStatus('Playlist created! Open YouTube Music → Library → Playlists.',true);toast('Playlist created with '+list.length+' songs!');window.open('https://music.youtube.com/library/playlists','_blank','noopener');
+ }catch(e){setStatus(e.message);toast(e.message)}finally{b.disabled=false;b.textContent='Create YT playlist ↗'}
+}
 const $=id=>document.getElementById(id);
 function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),2500)}
 function current(){return tracks[index%tracks.length]}
@@ -60,7 +92,7 @@ function renderList(){const n=Number($('sizeRange').value);$('sizeLabel').textCo
 function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 $('good').addEventListener('click',()=>decide('like'));$('bad').addEventListener('click',()=>decide('no'));$('skip').addEventListener('click',()=>{index=(index+1)%tracks.length;renderTrack()});$('sizeRange').addEventListener('input',renderList);
 $('reset').addEventListener('click',()=>{index=0;liked=[];passed=[];decisions={};renderTrack();toast('Fresh start. Find your sound.')});
-$('export').addEventListener('click',()=>{if(!liked.length){toast('Like a few songs first!');return}const n=Number($('sizeRange').value);const content='SongFinder playlist\n\n'+liked.slice().sort((a,b)=>b.score-a.score).slice(0,n).map((t,i)=>(i+1)+'. '+t.title+' — '+t.artist).join('\n');const blob=new Blob([content],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='songfinder-playlist.txt';a.click();URL.revokeObjectURL(url);toast('Playlist exported! Import / search the tracks in YouTube Music.')});
+$('export').addEventListener('click',()=>{if(liveMode){createYouTubePlaylist();return}if(!liked.length){toast('Like a few songs first!');return}const n=Number($('sizeRange').value);const content='SongFinder playlist\n\n'+liked.slice().sort((a,b)=>b.score-a.score).slice(0,n).map((t,i)=>(i+1)+'. '+t.title+' — '+t.artist).join('\n');const blob=new Blob([content],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='songfinder-playlist.txt';a.click();URL.revokeObjectURL(url);toast('Playlist exported! Import / search the tracks in YouTube Music.')});
 document.addEventListener('keydown',e=>{if(e.target.matches('input,textarea'))return;if(e.key==='ArrowRight')decide('like');if(e.key==='ArrowLeft')decide('no');if(e.key==='ArrowDown'){$('skip').click()}});
 renderTrack();
 </script></body></html>
